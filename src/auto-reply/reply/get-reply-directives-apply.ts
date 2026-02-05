@@ -145,10 +145,13 @@ export async function applyInlineDirectiveOverrides(params: {
       typing.cleanup();
       return { kind: "reply", reply: undefined };
     }
+    const configuredDefault = agentCfg?.thinkingDefault as ThinkLevel | undefined;
     const resolvedDefaultThinkLevel =
-      (sessionEntry?.thinkingLevel as ThinkLevel | undefined) ??
-      (agentCfg?.thinkingDefault as ThinkLevel | undefined) ??
-      (await modelState.resolveDefaultThinkingLevel());
+      configuredDefault === "off"
+        ? "off"
+        : ((sessionEntry?.thinkingLevel as ThinkLevel | undefined) ??
+          configuredDefault ??
+          (await modelState.resolveDefaultThinkingLevel()));
     const currentThinkLevel = resolvedDefaultThinkLevel;
     const currentVerboseLevel =
       (sessionEntry?.verboseLevel as VerboseLevel | undefined) ??

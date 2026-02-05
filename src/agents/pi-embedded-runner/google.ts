@@ -322,6 +322,50 @@ export function applyGoogleTurnOrderingFix(params: {
   return { messages: sanitized, didPrepend };
 }
 
+/**
+ * OpenRouter/Kimi require reasoning_content on every assistant message when thinking is enabled.
+ * Ensure every assistant message that has tool_use also has a thinking block (empty if missing)
+ * so replayed history satisfies the API even if thinking was on when the message was created.
+ */
+function ensureOpenRouterKimiReasoningContent(messages: AgentMessage[]): AgentMessage[] {
+  const out: AgentMessage[] = [];
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object" || msg.role !== "assistant") {
+      out.push(msg);
+      continue;
+    }
+    const assistant = msg as Extract<AgentMessage, { role: "assistant" }>;
+    if (!Array.isArray(assistant.content)) {
+      out.push(msg);
+      continue;
+    }
+    const hasToolUse = assistant.content.some(
+      (b) => b && typeof b === "object" && (b as { type?: unknown }).type === "tool_use",
+    );
+    const hasThinking = assistant.content.some(
+      (b) =>
+        b &&
+        typeof b === "object" &&
+        ((b as { type?: unknown }).type === "thinking" ||
+          (b as { type?: unknown }).type === "reasoning_content"),
+    );
+    if (hasToolUse && !hasThinking) {
+      type AssistantContentBlock = (typeof assistant.content)[number];
+      const emptyThinking: AssistantContentBlock = {
+        type: "thinking",
+        thinking: "",
+      } as AssistantContentBlock;
+      out.push({
+        ...assistant,
+        content: [emptyThinking, ...assistant.content],
+      });
+      continue;
+    }
+    out.push(msg);
+  }
+  return out;
+}
+
 export async function sanitizeSessionHistory(params: {
   messages: AgentMessage[];
   modelApi?: string | null;
@@ -371,6 +415,16 @@ export async function sanitizeSessionHistory(params: {
       ? downgradeOpenAIReasoningBlocks(repairedTools)
       : repairedTools;
 
+  // OpenRouter/Kimi: ensure assistant messages with tool_use have a thinking block so API doesn't 400.
+  const isOpenRouterKimi =
+    (params.provider === "openrouter" || params.provider === "opencode") &&
+    params.modelId &&
+    (params.modelId.toLowerCase().includes("kimi") ||
+      params.modelId.toLowerCase().includes("moonshot"));
+  const sanitizedOpenRouterKimi = isOpenRouterKimi
+    ? ensureOpenRouterKimiReasoningContent(sanitizedOpenAI)
+    : sanitizedOpenAI;
+
   if (hasSnapshot && (!priorSnapshot || modelChanged)) {
     appendModelSnapshot(params.sessionManager, {
       timestamp: Date.now(),
@@ -381,11 +435,11 @@ export async function sanitizeSessionHistory(params: {
   }
 
   if (!policy.applyGoogleTurnOrdering) {
-    return sanitizedOpenAI;
+    return sanitizedOpenRouterKimi;
   }
 
   return applyGoogleTurnOrderingFix({
-    messages: sanitizedOpenAI,
+    messages: sanitizedOpenRouterKimi,
     modelApi: params.modelApi,
     sessionManager: params.sessionManager,
     sessionId: params.sessionId,

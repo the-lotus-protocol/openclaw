@@ -167,6 +167,14 @@ export async function runEmbeddedPiAgent(
 
       const initialThinkLevel = params.thinkLevel ?? "off";
       let thinkLevel = initialThinkLevel;
+      // OpenRouter/Kimi (and similar) require reasoning_content on every assistant message when thinking is on.
+      // Force thinking off so we never send thinking=true and avoid 400 "reasoning_content is missing".
+      const isOpenRouterKimi =
+        normalizeProviderId(provider) === "openrouter" &&
+        (modelId.toLowerCase().includes("kimi") || modelId.toLowerCase().includes("moonshot"));
+      if (isOpenRouterKimi && thinkLevel !== "off") {
+        thinkLevel = "off";
+      }
       const attemptedThinking = new Set<ThinkLevel>();
       let apiKeyInfo: ApiKeyInfo | null = null;
       let lastProfileId: string | undefined;

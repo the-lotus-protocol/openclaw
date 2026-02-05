@@ -1094,6 +1094,8 @@ export function createExecTool(
           10_000,
           (typeof params.timeout === "number" ? params.timeout : defaultTimeoutSec) * 1000 + 5_000,
         );
+        const effectiveTimeoutSec =
+          typeof params.timeout === "number" ? params.timeout : defaultTimeoutSec;
         const buildInvokeParams = (
           approvedByAsk: boolean,
           approvalDecision: "allow-once" | "allow-always" | null,
@@ -1107,7 +1109,7 @@ export function createExecTool(
               rawCommand: params.command,
               cwd: workdir,
               env: nodeEnv,
-              timeoutMs: typeof params.timeout === "number" ? params.timeout * 1000 : undefined,
+              timeoutMs: effectiveTimeoutSec * 1000,
               agentId,
               sessionKey: defaults?.sessionKey,
               approved: approvedByAsk,

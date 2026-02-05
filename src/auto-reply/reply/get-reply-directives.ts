@@ -343,10 +343,15 @@ export async function resolveReplyDirectives(params: {
     groupResolution,
   });
   const defaultActivation = defaultGroupActivation(requireMention);
+  // When config explicitly sets thinkingDefault to "off", use it for all sessions so tool use
+  // works with providers that require reasoning_content on tool-call messages when thinking is on.
+  // Config "off" wins over directives and session so the UI/session cannot re-enable thinking.
   const resolvedThinkLevel =
-    directives.thinkLevel ??
-    (sessionEntry?.thinkingLevel as ThinkLevel | undefined) ??
-    (agentCfg?.thinkingDefault as ThinkLevel | undefined);
+    (agentCfg?.thinkingDefault as ThinkLevel | undefined) === "off"
+      ? "off"
+      : (directives.thinkLevel ??
+        (sessionEntry?.thinkingLevel as ThinkLevel | undefined) ??
+        (agentCfg?.thinkingDefault as ThinkLevel | undefined));
 
   const resolvedVerboseLevel =
     directives.verboseLevel ??

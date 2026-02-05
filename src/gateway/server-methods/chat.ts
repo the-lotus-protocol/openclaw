@@ -211,11 +211,14 @@ export const chatHandlers: GatewayRequestHandlers = {
     const sliced = rawMessages.length > max ? rawMessages.slice(-max) : rawMessages;
     const sanitized = stripEnvelopeFromMessages(sliced);
     const capped = capArrayByJsonBytes(sanitized, getMaxChatHistoryMessagesBytes()).items;
-    let thinkingLevel = entry?.thinkingLevel;
+    const configuredDefault = cfg.agents?.defaults?.thinkingDefault;
+    // When config explicitly sets thinkingDefault to "off", use it for all sessions so tool use
+    // works with providers that require reasoning_content on tool-call messages when thinking is on.
+    let thinkingLevel: string | undefined =
+      configuredDefault === "off" ? "off" : entry?.thinkingLevel;
     if (!thinkingLevel) {
-      const configured = cfg.agents?.defaults?.thinkingDefault;
-      if (configured) {
-        thinkingLevel = configured;
+      if (configuredDefault) {
+        thinkingLevel = configuredDefault;
       } else {
         const sessionAgentId = resolveSessionAgentId({ sessionKey, config: cfg });
         const { provider, model } = resolveSessionModelRef(cfg, entry, sessionAgentId);
@@ -443,9 +446,10 @@ export const chatHandlers: GatewayRequestHandlers = {
       respond(true, ackPayload, undefined, { runId: clientRunId });
 
       const trimmedMessage = parsedMessage.trim();
-      const injectThinking = Boolean(
-        p.thinking && trimmedMessage && !trimmedMessage.startsWith("/"),
-      );
+      const thinkingDefaultOff = cfg.agents?.defaults?.thinkingDefault === "off";
+      const injectThinking =
+        !thinkingDefaultOff &&
+        Boolean(p.thinking && trimmedMessage && !trimmedMessage.startsWith("/"));
       const commandBody = injectThinking ? `/think ${p.thinking} ${parsedMessage}` : parsedMessage;
       const clientInfo = client?.connect?.client;
       // Inject timestamp so agents know the current date/time.

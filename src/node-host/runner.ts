@@ -947,7 +947,9 @@ async function handleInvoke(
     allowlistSatisfied = false;
   }
 
-  const useMacAppExec = process.platform === "darwin";
+  const useMacAppExec =
+    process.platform === "darwin" &&
+    process.env.OPENCLAW_EXEC_USE_NODE?.trim().toLowerCase() !== "1";
   if (useMacAppExec) {
     const approvalDecision =
       params.approvalDecision === "allow-once" || params.approvalDecision === "allow-always"
@@ -1007,6 +1009,12 @@ async function handleInvoke(
       return;
     } else {
       const result: ExecHostRunResult = response.payload;
+      const stdoutLen = result.stdout?.length ?? 0;
+      const stderrLen = result.stderr?.length ?? 0;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[exec] Mac app finished: exitCode=${result.exitCode} timedOut=${result.timedOut} stdout=${stdoutLen} stderr=${stderrLen}`,
+      );
       const combined = [result.stdout, result.stderr, result.error].filter(Boolean).join("\n");
       await sendNodeEvent(
         client,
@@ -1165,6 +1173,12 @@ async function handleInvoke(
     params.cwd?.trim() || undefined,
     env,
     params.timeoutMs ?? undefined,
+  );
+  const stdoutLen = result.stdout?.length ?? 0;
+  const stderrLen = result.stderr?.length ?? 0;
+  // eslint-disable-next-line no-console
+  console.log(
+    `[exec] node host finished: exitCode=${result.exitCode} timedOut=${result.timedOut} stdout=${stdoutLen} stderr=${stderrLen} truncated=${result.truncated}`,
   );
   if (result.truncated) {
     const suffix = "... (truncated)";

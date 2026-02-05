@@ -53,4 +53,11 @@ describe("stripPluginOnlyAllowlist", () => {
     expect(policy.policy?.allow).toEqual(["read", "lobster"]);
     expect(policy.unknownAllowlist).toEqual(["lobster"]);
   });
+
+  it("never reports * (allow-all wildcard) as unknown", () => {
+    const emptyPlugins: PluginToolGroups = { all: [], byPlugin: new Map() };
+    const policy = stripPluginOnlyAllowlist({ allow: ["*"] }, emptyPlugins, coreTools);
+    expect(policy.policy?.allow).toEqual(["*"]);
+    expect(policy.unknownAllowlist).toEqual([]);
+  });
 });
