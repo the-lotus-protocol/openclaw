@@ -406,6 +406,7 @@ export async function runEmbeddedPiAgent(
                   thinkLevel,
                   reasoningLevel: params.reasoningLevel,
                   bashElevated: params.bashElevated,
+                  senderIsOwner: params.senderIsOwner,
                   extraSystemPrompt: params.extraSystemPrompt,
                   ownerNumbers: params.ownerNumbers,
                 });

@@ -124,6 +124,83 @@ const DEFAULT_APPROVAL_TIMEOUT_MS = 120_000;
 const DEFAULT_APPROVAL_REQUEST_TIMEOUT_MS = 130_000;
 const DEFAULT_APPROVAL_RUNNING_NOTICE_MS = 10_000;
 const APPROVAL_SLUG_LENGTH = 8;
+const DEFAULT_HOST_PATH_ALLOWLIST = new Set<string>([
+  "/opt/homebrew/bin",
+  "/opt/homebrew/sbin",
+  "/usr/local/bin",
+  "/usr/bin",
+  "/bin",
+  "/usr/sbin",
+  "/sbin",
+  ...(process.env.HOME ? [`${process.env.HOME}/.local/bin`] : []),
+]);
+
+// Security: Blocklist of environment variables that could alter execution flow
+// or inject code when running on non-sandboxed hosts (Gateway/Node).
+const DANGEROUS_HOST_ENV_VARS = new Set([
+  "LD_PRELOAD",
+  "LD_LIBRARY_PATH",
+  "LD_AUDIT",
+  "DYLD_INSERT_LIBRARIES",
+  "DYLD_LIBRARY_PATH",
+  "NODE_OPTIONS",
+  "NODE_PATH",
+  "PYTHONPATH",
+  "PYTHONHOME",
+  "RUBYLIB",
+  "PERL5LIB",
+  "BASH_ENV",
+  "ENV",
+  "GCONV_PATH",
+  "IFS",
+  "SSLKEYLOGFILE",
+]);
+const DANGEROUS_HOST_ENV_PREFIXES = ["DYLD_", "LD_"];
+
+function normalizePathEntry(entry: string): string {
+  return entry.trim().replace(/\/+$/, "");
+}
+
+function validateHostPathValue(value: string) {
+  const entries = value.split(path.delimiter).map(normalizePathEntry).filter(Boolean);
+  for (const entry of entries) {
+    if (!entry.startsWith("/")) {
+      throw new Error(
+        `Security Violation: PATH entry '${entry}' must be an absolute path on host execution.`,
+      );
+    }
+    if (!DEFAULT_HOST_PATH_ALLOWLIST.has(entry)) {
+      throw new Error(
+        `Security Violation: PATH entry '${entry}' is not allowlisted for host execution.`,
+      );
+    }
+  }
+}
+
+// Centralized sanitization helper.
+// Throws an error if dangerous variables or PATH modifications are detected on the host.
+function validateHostEnv(env: Record<string, string>): void {
+  for (const key of Object.keys(env)) {
+    const upperKey = key.toUpperCase();
+
+    // 1. Block known dangerous variables (Fail Closed)
+    if (DANGEROUS_HOST_ENV_PREFIXES.some((prefix) => upperKey.startsWith(prefix))) {
+      throw new Error(
+        `Security Violation: Environment variable '${key}' is forbidden during host execution.`,
+      );
+    }
+    if (DANGEROUS_HOST_ENV_VARS.has(upperKey)) {
+      throw new Error(
+        `Security Violation: Environment variable '${key}' is forbidden during host execution.`,
+      );
+    }
+
+    // 2. Strictly validate PATH on host
+    if (upperKey === "PATH") {
+      validateHostPathValue(env[key]);
+    }
+  }
+}
 
 type PtyExitEvent = { exitCode: number; signal?: number };
 type PtyListener<T> = (event: T) => void;
@@ -965,13 +1042,11 @@ export function createExecTool(
       }
 
       const baseEnv = coerceEnv(process.env);
-
       // Logic: Sandbox gets raw env. Host (gateway/node) must pass validation.
       // We validate BEFORE merging to prevent any dangerous vars from entering the stream.
       if (host !== "sandbox" && params.env) {
         validateHostEnv(params.env);
       }
-
       const mergedEnv = params.env ? { ...baseEnv, ...params.env } : baseEnv;
 
       const env = sandbox

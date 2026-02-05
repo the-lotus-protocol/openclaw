@@ -83,7 +83,6 @@ export function normalizeToolName(name: string) {
   const normalized = name.trim().toLowerCase();
   return TOOL_NAME_ALIASES[normalized] ?? normalized;
 }
-
 export function isOwnerOnlyToolName(name: string) {
   return OWNER_ONLY_TOOL_NAMES.has(normalizeToolName(name));
 }
